@@ -1,0 +1,3 @@
+[submodule "snake-shared"]
+	path = snake-shared
+	url = github-anya:acherenovich/snake-shared.git
