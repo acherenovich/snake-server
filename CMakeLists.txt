@@ -5,10 +5,14 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+add_compile_definitions(BOOST_ASIO_NO_DEPRECATED)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wno-unused-variable -Wno-unused-parameter -Wno-sign-compare -Wno-deprecated-declarations")
+
 # Выбираем, какие модули snake-shared включать
 set(VSHARED_ENABLE_LOGGING ON  CACHE BOOL "" FORCE)
 set(VSHARED_ENABLE_NET     OFF CACHE BOOL "" FORCE)
 # set(VSHARED_ENABLE_DB   ON  CACHE BOOL "" FORCE)
+
 
 add_subdirectory(snake-shared)
 
