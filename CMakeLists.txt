@@ -10,9 +10,14 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wno-unused-variable -Wno-
 
 # Выбираем, какие модули snake-shared включать
 set(VSHARED_ENABLE_LOGGING ON  CACHE BOOL "" FORCE)
-set(VSHARED_ENABLE_NET     OFF CACHE BOOL "" FORCE)
-# set(VSHARED_ENABLE_DB   ON  CACHE BOOL "" FORCE)
+set(VSHARED_ENABLE_WEBSOCKET     ON CACHE BOOL "" FORCE)
+set(VSHARED_ENABLE_SERVICE_LOADER     ON CACHE BOOL "" FORCE)
 
+
+include_directories(
+        src
+        /usr/local/include
+)
 
 add_subdirectory(snake-shared)
 
