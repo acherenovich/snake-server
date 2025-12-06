@@ -17,9 +17,11 @@ namespace Core::Servers::Websocket {
         public:
             using Shared = std::shared_ptr<Client>;
 
-            virtual ~Client() = default;
+            ~Client() override = default;
 
             [[nodiscard]] virtual bool IsConnected() const = 0;
+
+            virtual void Send(const std::string & type, const boost::json::object & body) = 0;
         };
 
         class Message: public BaseServiceContainer
@@ -27,7 +29,7 @@ namespace Core::Servers::Websocket {
         public:
             using Shared = std::shared_ptr<Message>;
 
-            virtual ~Message() = default;
+            ~Message() override = default;
 
             [[nodiscard]] virtual const std::string & GetType() const = 0;
 

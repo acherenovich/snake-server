@@ -42,6 +42,8 @@ namespace Core {
         void SetupContainer(const BaseServiceContainer & parent)
         {
             logger_ = parent.logger_->CreateChild(GetServiceContainerName());
+
+            OnSetupContainerSuccess();
         }
 
         void SetupContainer(const BaseServiceContainer * parent)

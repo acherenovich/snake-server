@@ -9,9 +9,13 @@ add_compile_definitions(BOOST_ASIO_NO_DEPRECATED)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wno-unused-variable -Wno-unused-parameter -Wno-sign-compare -Wno-deprecated-declarations")
 
 # Выбираем, какие модули snake-shared включать
+set(VSHARED_ENABLE_UTILS ON  CACHE BOOL "" FORCE)
 set(VSHARED_ENABLE_LOGGING ON  CACHE BOOL "" FORCE)
 set(VSHARED_ENABLE_WEBSOCKET     ON CACHE BOOL "" FORCE)
 set(VSHARED_ENABLE_SERVICE_LOADER     ON CACHE BOOL "" FORCE)
+set(VSHARED_ENABLE_COROUTINE     ON CACHE BOOL "" FORCE)
+set(VSHARED_ENABLE_MYSQL     ON CACHE BOOL "" FORCE)
+set(VSHARED_ENABLE_CRYPT     ON CACHE BOOL "" FORCE)
 
 
 include_directories(

@@ -1,6 +1,7 @@
 #pragma once
 
-#include "[core_loader].hpp"
+#include "player.hpp"
+#include "servers/websocket/message.hpp"
 
 namespace Core::App::PlayerSession
 {
@@ -13,6 +14,7 @@ namespace Core::App::PlayerSession
 
             virtual void CreateSession(uint32_t ownerAccountID) = 0;
 
+            virtual Player::Shared GetPlayer(const Servers::Websocket::Interface::Client::Shared & client) = 0;
         };
     }
 }

@@ -1,11 +1,7 @@
 #include "[core_loader].hpp"
-#include <logging.hpp>
+#include "logging.hpp"
+#include "coroutine.hpp"
 
-#include <thread>
-
-#include "[core_loader].hpp"
-
-#include <logging.hpp>
 #include <thread>
 
 [[noreturn]] int main()
@@ -27,6 +23,7 @@
     for (;;) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
         loader.ProcessTick();
+        Utils::GetTaskManager().ClearFinishedTasks();
     }
 }
 

@@ -21,12 +21,15 @@ namespace Core::Servers::Websocket {
         public Interface::Server,
         public std::enable_shared_from_this<WebsocketService>
     {
+        Net::Server::Shared server_;
+        std::unordered_map<std::string, std::vector<MessageCallback>> messageHandlers_;
+        std::vector<ClientCallback> clientHandlers_;
+
+        std::unordered_map<Net::Session::Shared, Client::Shared> clients_;
     public:
         using Shared    = std::shared_ptr<WebsocketService>;
 
-        WebsocketService()
-        {}
-
+        WebsocketService() = default;
         ~WebsocketService() override = default;
 
     protected:
@@ -82,12 +85,6 @@ namespace Core::Servers::Websocket {
             clients_.erase(it);
             return client;
         }
-    private:
-        Net::Server::Shared   server_;
-        std::unordered_map<std::string, std::vector<MessageCallback>> messageHandlers_;
-        std::vector<ClientCallback> clientHandlers_;
-
-        std::unordered_map<Net::Session::Shared, Client::Shared> clients_;
     };
 
 } // namespace Core::Servers::Websocket

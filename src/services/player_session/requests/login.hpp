@@ -8,11 +8,11 @@ namespace Core::App::PlayerSession::Requests {
         public:
         void Initialise() override;
 
-        void Incoming(const Client::Shared & client, const Message::Shared & message) override;
+        void Incoming(const Interface::Player::Shared & player, const Message::Shared & message) override;
 
-        std::string GetType() override
+        [[nodiscard]] std::string GetType() const override
         {
             return "player_session::login";
-        };
+        }
     };
 }

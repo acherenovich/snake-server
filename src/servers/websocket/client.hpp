@@ -28,6 +28,17 @@ namespace Core::Servers::Websocket {
             return connected_;
         }
 
+        void Send(const std::string & type, const boost::json::object & body) override
+        {
+            if (!connected_)
+            {
+                Log()->Warning("Send message to disconnected client");
+                return;
+            }
+
+            session_->Send(boost::json::object{{"type", type}, {"body", body}});
+        }
+
         void Disconnected()
         {
             connected_ = false;

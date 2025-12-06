@@ -1,8 +1,11 @@
 #pragma once
 
+#include <utility>
+
 #include "servers/websocket/interfaces/server.hpp"
 
 #include "services/player_session/interfaces/controller.hpp"
+#include "services/player_session/interfaces/player.hpp"
 #include "[core_loader].hpp"
 
 namespace Core::App::PlayerSession::Requests {
@@ -14,8 +17,8 @@ namespace Core::App::PlayerSession::Requests {
     public:
         using Shared = std::shared_ptr<RequestsServiceContainer>;
 
-        explicit RequestsServiceContainer(const Interface::Controller::Shared & controller): controller_(controller) {}
-        explicit RequestsServiceContainer() {}
+        explicit RequestsServiceContainer(Interface::Controller::Shared controller): controller_(std::move(controller)) {}
+        explicit RequestsServiceContainer() = default;
 
         ~RequestsServiceContainer() override = default;
 
@@ -30,6 +33,11 @@ namespace Core::App::PlayerSession::Requests {
         {
             SetupContainer(*parent);
         }
+
+        [[nodiscard]] const Interface::Controller::Shared & GetController() const
+        {
+            return controller_;
+        }
     };
 
     class RequestsServiceInstance : public Utils::Service::Instance, public RequestsServiceContainer {
@@ -42,7 +50,7 @@ namespace Core::App::PlayerSession::Requests {
     public:
         using Shared = std::shared_ptr<RequestsServiceInstance>;
 
-        explicit RequestsServiceInstance() {}
+        explicit RequestsServiceInstance() = default;
 
         ~RequestsServiceInstance() override = default;
 
@@ -51,13 +59,40 @@ namespace Core::App::PlayerSession::Requests {
             server_ = IFace().Get<Server>();
 
             server_->RegisterMessage(GetType(), [this](const Client::Shared & client, const Message::Shared & message) {
-                Incoming(client, message);
+                const auto player = GetController()->GetPlayer(client);
+                if (!player)
+                    return;
+
+                try
+                {
+                    Incoming(player, message);
+                }
+                catch (const std::exception & e)
+                {
+                    Log()->Error("exception: {}", e.what());
+                    SendFail(player, "internal_server_error");
+                }
             });
         }
 
-        virtual void Incoming(const Client::Shared & client, const Message::Shared & message) = 0;
+        void SendResponse(const Interface::Player::Shared & player, const boost::json::object & message)
+        {
+            player->GetClient()->Send(GetType() + "::response", message);
+        }
 
-        virtual std::string GetType() = 0;
+        void SendFail(const Interface::Player::Shared & player, const std::string & reason)
+        {
+            SendResponse(player, {{"success", "false"}, {"message", reason}});
+        }
+
+        virtual void Incoming(const Interface::Player::Shared & player, const Message::Shared & message) = 0;
+
+        [[nodiscard]] virtual std::string GetType() const = 0;
+
+        [[nodiscard]] std::string GetServiceContainerName() const override
+        {
+            return GetType();
+        }
     };
 
     using Loader = Utils::Service::Loader;
