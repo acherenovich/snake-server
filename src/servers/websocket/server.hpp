@@ -82,6 +82,7 @@ namespace Core::Servers::Websocket {
                 Log()->Fatal("CloseClient: Client {} not found", session->RemoteAddress());
 
             const auto client = it->second;
+            client->Close();
             clients_.erase(it);
             return client;
         }

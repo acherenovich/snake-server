@@ -75,14 +75,19 @@ namespace Core::App::PlayerSession::Requests {
             });
         }
 
-        void SendResponse(const Interface::Player::Shared & player, const boost::json::object & message)
+        uint64_t SendResponse(const Interface::Player::Shared & player, const boost::json::object & message, const uint64_t targetJobID = 0)
         {
-            player->GetClient()->Send(GetType() + "::response", message);
+            return player->GetClient()->Send(GetType() + "::response", message, targetJobID);
         }
 
-        void SendFail(const Interface::Player::Shared & player, const std::string & reason)
+        void SendFail(const Interface::Player::Shared & player, const std::string & reason, const uint64_t targetJobID = 0)
         {
-            SendResponse(player, {{"success", "false"}, {"message", reason}});
+            SendResponse(player, {{"success", false}, {"message", reason}}, targetJobID);
+        }
+
+        void SendSuccess(const Interface::Player::Shared & player, const boost::json::object & message, const uint64_t targetJobID = 0)
+        {
+            SendResponse(player, {{"success", true}, {"message", message}}, targetJobID);
         }
 
         virtual void Incoming(const Interface::Player::Shared & player, const Message::Shared & message) = 0;

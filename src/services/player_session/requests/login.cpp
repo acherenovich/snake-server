@@ -27,13 +27,13 @@ namespace Core::App::PlayerSession::Requests {
 
     void Login::Incoming(const Interface::Player::Shared & player, const Message::Shared & message)
     {
+        const auto sourceJobID = message->GetHeaders()->GetSourceJobID();
         Log()->Debug("Incoming");
-        player->Log()->Debug("Message: {}", message->ToString());
 
         const auto & model = player->Model();
         if (model->GetPlayerType() != PlayerAnonymous)
         {
-            return SendFail(player, "already_logged");
+            return SendFail(player, "already_logged", sourceJobID);
         }
 
         auto & request = message->GetBody();
@@ -52,14 +52,14 @@ namespace Core::App::PlayerSession::Requests {
 
             model->Login(login, password) = [=, this](bool success) {
                 if (!success)
-                    return SendFail(player, "user_not_found");
+                    return SendFail(player, "user_not_found", sourceJobID);
 
-                SendResponse(player, {{"success", true}});
+                SendSuccess(player, {}, sourceJobID);
             };
         }
 
         // boost::json::object response;
         //
-        // SendResponse(player, response);
+        // SendSuccess(player, response);
     }
 }

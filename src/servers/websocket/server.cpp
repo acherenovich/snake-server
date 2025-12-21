@@ -1,6 +1,7 @@
 #include "servers/websocket/server.hpp"
 
 #include <chrono>
+#include <ranges>
 
 namespace Core::Servers::Websocket {
 
@@ -35,6 +36,13 @@ namespace Core::Servers::Websocket {
     void WebsocketService::ProcessTick()
     {
         server_->ProcessTick();
+
+        const auto now = std::chrono::steady_clock::now();
+
+        for (const auto &client: clients_ | std::views::values)
+        {
+            client->ProcessTick();
+        }
     }
 
     void WebsocketService::OnSessionConnected(const Net::Session::Shared & session)
@@ -63,12 +71,22 @@ namespace Core::Servers::Websocket {
     void WebsocketService::OnMessage(const Net::Session::Shared & session,
                                          const boost::json::value & jsonValue)
     {
+        session->Log()->Debug("Message: {}", serialize(jsonValue));
+
         if (!jsonValue.is_object()) {
             Log()->Warning("Incoming JSON is not an object");
             return;
         }
 
         const boost::json::object & obj = jsonValue.as_object();
+
+        const boost::json::value * headersValue = obj.if_contains("headers");
+        if (headersValue == nullptr || !headersValue->is_object()) {
+            Log()->Warning("Incoming JSON has no string 'headers' field");
+            return;
+        }
+
+        const auto headers = Headers::Create(this, headersValue->as_object());
 
         const boost::json::value * typeValue = obj.if_contains("type");
         if (typeValue == nullptr || !typeValue->is_string()) {
@@ -78,23 +96,20 @@ namespace Core::Servers::Websocket {
 
         const std::string type = std::string(typeValue->as_string());
 
-        const auto it = messageHandlers_.find(type);
-        if (it == messageHandlers_.end()) {
-            Log()->Warning("No handler registered for type '{}'", type);
-            return;
-        }
-
         const boost::json::value * messageValue = obj.if_contains("message");
         if (messageValue == nullptr || !messageValue->is_object()) {
             Log()->Warning("Incoming JSON has no object 'message' field");
             return;
         }
 
+        const auto message = Message::Create(this, headers, type, messageValue->get_object());
         const auto client = GetClient(session);
-        const auto message = Message::Create(this, type, messageValue->get_object());
+        client->OnMessage(message);
 
-        for (const auto & handler : it->second)
-            handler(client, message);
+        if (const auto it = messageHandlers_.find(type); it != messageHandlers_.end()) {
+            for (const auto & handler : it->second)
+                handler(client, message);
+        }
     }
 
     void WebsocketService::RegisterMessage(const std::string & type, const MessageCallback & callback)

@@ -18,7 +18,7 @@
     loader.OnAllServicesLoaded();
     loader.OnAllInterfacesLoaded();
 
-    log->Msg("Core services initialised, JSON Websocket server is running.");
+    log->Msg("Core services initialised");
 
     for (;;) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
