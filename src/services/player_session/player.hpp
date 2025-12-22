@@ -24,6 +24,7 @@ namespace Core::App::PlayerSession
 
         [[nodiscard]] const Servers::Websocket::Interface::Client::Shared & GetClient() const override;
 
+        [[nodiscard]] boost::json::object Serialise() override;
 
         void OnSetupContainerSuccess() override
         {

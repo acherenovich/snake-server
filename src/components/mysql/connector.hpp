@@ -34,6 +34,11 @@ namespace Core::Components::MySQL {
         {
             return queryResult_.rows.size();
         }
+
+        [[nodiscard]] uint64_t InsertID() const override
+        {
+            return queryResult_.insertId;
+        }
     };
 
     class Connector final:

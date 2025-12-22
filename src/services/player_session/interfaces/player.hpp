@@ -18,6 +18,8 @@ namespace Core::App::PlayerSession
             [[nodiscard]] virtual Model::Interface::Player::Shared Model() = 0;
 
             [[nodiscard]] const virtual Servers::Websocket::Interface::Client::Shared & GetClient() const = 0;
+
+            [[nodiscard]] virtual boost::json::object Serialise() = 0;
         };
     }
 }

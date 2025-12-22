@@ -16,4 +16,13 @@ namespace Core::App::PlayerSession
     {
         return client_;
     }
+
+    [[nodiscard]] boost::json::object Player::Serialise()
+    {
+        boost::json::object result;
+
+        result["model"] = model_->Serialise();
+
+        return result;
+    }
 }

@@ -42,19 +42,31 @@ namespace Core::App::PlayerSession::Requests {
             /// token auth
 
             const std::string token = request["token"].as_string().c_str();
+
+            model->Login(token) = [=, this](bool success) {
+                if (!success)
+                    return SendFail(player, "token_out_of_date", sourceJobID);
+
+                SendSuccess(player, {{"player", player->Serialise()}}, sourceJobID);
+            };
         }
         else
         {
             /// log + pass auth
 
-            const std::string login = request["login"].as_string().c_str();
-            const std::string password = request["password"].as_string().c_str();
+            const std::string login = NormalizeLogin(request["login"].as_string().c_str()).value_or("");
+            const std::string password = NormalizePassword(request["password"].as_string().c_str()).value_or("");
+
+            if (login.empty())
+                return SendFail(player, "malformed_login", sourceJobID);
+            if (password.empty())
+                return SendFail(player, "malformed_password", sourceJobID);
 
             model->Login(login, password) = [=, this](bool success) {
                 if (!success)
                     return SendFail(player, "user_not_found", sourceJobID);
 
-                SendSuccess(player, {}, sourceJobID);
+                SendSuccess(player, {{"player", player->Serialise()}}, sourceJobID);
             };
         }
 

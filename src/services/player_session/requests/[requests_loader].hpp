@@ -87,7 +87,7 @@ namespace Core::App::PlayerSession::Requests {
 
         void SendSuccess(const Interface::Player::Shared & player, const boost::json::object & message, const uint64_t targetJobID = 0)
         {
-            SendResponse(player, {{"success", true}, {"message", message}}, targetJobID);
+            SendResponse(player, {{"success", true}, {"body", message}}, targetJobID);
         }
 
         virtual void Incoming(const Interface::Player::Shared & player, const Message::Shared & message) = 0;

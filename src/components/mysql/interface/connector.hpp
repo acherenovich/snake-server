@@ -25,6 +25,8 @@ namespace Core::Components::MySQL {
             virtual boost::json::object & Get(size_t n) = 0;
 
             [[nodiscard]] virtual size_t Count() const = 0;
+
+            [[nodiscard]] virtual uint64_t InsertID() const = 0;
         };
 
         class Connector : public BaseServiceInterface
