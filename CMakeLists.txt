@@ -13,7 +13,6 @@ set(CMAKE_CXX_FLAGS
         "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wno-unused-variable -Wno-unused-parameter -Wno-sign-compare -Wno-deprecated-declarations"
 )
 
-# Кладём exe в корень проекта (как ты просишь)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR})
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR})
 
@@ -27,13 +26,17 @@ if (APPLE)
     )
 else()
     # Windows / MinGW
-    # Fix "too many sections / file too big" on MinGW (Boost/Beast etc.)
-    add_compile_options(-Wa,-mbig-obj)
+    list(PREPEND CMAKE_PREFIX_PATH "C:/mingw64")
 
-    # MSYS2 MinGW64 deps (OpenSSL + Boost + MySQL client)
+    # MSYS2 MinGW64 deps: OpenSSL + Boost
     list(PREPEND CMAKE_PREFIX_PATH "C:/msys64/mingw64")
+
     set(OPENSSL_ROOT_DIR "C:/msys64/mingw64" CACHE PATH "" FORCE)
     set(BOOST_ROOT       "C:/msys64/mingw64" CACHE PATH "" FORCE)
+
+    add_compile_options(-Wa,-mbig-obj)
+
+    include_directories("C:/mingw64/include")
 endif()
 
 set(BUILD_SHARED_LIBS OFF)
@@ -50,6 +53,11 @@ set(VSHARED_ENABLE_COROUTINE        ON CACHE BOOL "" FORCE)
 set(VSHARED_ENABLE_MYSQL            ON CACHE BOOL "" FORCE)
 set(VSHARED_ENABLE_CRYPT            ON CACHE BOOL "" FORCE)
 set(VSHARED_ENABLE_LEGACY_GAME      ON CACHE BOOL "" FORCE)
+
+find_package(SFML 2.6
+        COMPONENTS system
+        CONFIG REQUIRED
+)
 
 # ===============================
 # Includes / subprojects
@@ -75,6 +83,7 @@ add_executable(snake-server
 target_link_libraries(snake-server
         PRIVATE
         snake-shared::all
+        sfml-system
 )
 
 # WinSock symbols (Boost.Asio/Beast на Windows)

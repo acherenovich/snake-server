@@ -37,8 +37,6 @@ namespace Core::Servers::Websocket {
     {
         server_->ProcessTick();
 
-        const auto now = std::chrono::steady_clock::now();
-
         for (const auto &client: clients_ | std::views::values)
         {
             client->ProcessTick();
