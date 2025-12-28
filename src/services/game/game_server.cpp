@@ -12,6 +12,7 @@ namespace Core::App::Game
     void GameServer::Initialise(const uint8_t serverID)
     {
         Utils::Net::Udp::ServerConfig cfg;
+        cfg.address = "0.0.0.0";
         cfg.port = 7777 + serverID;
         cfg.mode = Utils::Net::Udp::Mode::Bytes;
         cfg.ioThreads = 2;

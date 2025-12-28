@@ -5,7 +5,6 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_FIND_FRAMEWORK NEVER)
-set(SFML_STATIC_LIBRARIES ON)
 set(BUILD_SHARED_LIBS OFF)
 
 add_compile_definitions(BOOST_ASIO_NO_DEPRECATED)
@@ -24,6 +23,9 @@ if (APPLE)
             "/opt/homebrew"
             "/usr/local"
     )
+    set(SFML_STATIC_LIBRARIES ON)
+elseif (UNIX)
+    set(SFML_STATIC_LIBRARIES OFF)
 else()
     # Windows / MinGW
     list(PREPEND CMAKE_PREFIX_PATH "C:/mingw64")
@@ -37,6 +39,7 @@ else()
     add_compile_options(-Wa,-mbig-obj)
 
     include_directories("C:/mingw64/include")
+    set(SFML_STATIC_LIBRARIES ON)
 endif()
 
 set(BUILD_SHARED_LIBS OFF)
