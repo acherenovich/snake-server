@@ -4,6 +4,9 @@ project(snake-server LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_FIND_FRAMEWORK NEVER)
+set(SFML_STATIC_LIBRARIES ON)
+set(BUILD_SHARED_LIBS OFF)
 
 add_compile_definitions(BOOST_ASIO_NO_DEPRECATED)
 set(CMAKE_CXX_FLAGS
@@ -18,16 +21,12 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR})
 # Platform-specific setup
 # ===============================
 if (APPLE)
-    set(CMAKE_FIND_FRAMEWORK FIRST)
-
     list(PREPEND CMAKE_PREFIX_PATH
             "/opt/homebrew"
             "/usr/local"
     )
 else()
     # Windows / MinGW
-    set(CMAKE_FIND_FRAMEWORK NEVER)
-
     # Fix "too many sections / file too big" on MinGW (Boost/Beast etc.)
     add_compile_options(-Wa,-mbig-obj)
 
@@ -45,10 +44,12 @@ set(BUILD_SHARED_LIBS OFF)
 set(VSHARED_ENABLE_UTILS            ON CACHE BOOL "" FORCE)
 set(VSHARED_ENABLE_LOGGING          ON CACHE BOOL "" FORCE)
 set(VSHARED_ENABLE_WEBSOCKET        ON CACHE BOOL "" FORCE)
+set(VSHARED_ENABLE_UDP              ON CACHE BOOL "" FORCE)
 set(VSHARED_ENABLE_SERVICE_LOADER   ON CACHE BOOL "" FORCE)
 set(VSHARED_ENABLE_COROUTINE        ON CACHE BOOL "" FORCE)
 set(VSHARED_ENABLE_MYSQL            ON CACHE BOOL "" FORCE)
 set(VSHARED_ENABLE_CRYPT            ON CACHE BOOL "" FORCE)
+set(VSHARED_ENABLE_LEGACY_GAME      ON CACHE BOOL "" FORCE)
 
 # ===============================
 # Includes / subprojects
