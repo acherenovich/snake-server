@@ -46,11 +46,11 @@ namespace Core::App::Game
             std::unordered_map<std::uint32_t, std::uint32_t> lastHash; // EntityID -> hash
             std::unordered_map<std::uint32_t, Utils::Legacy::Game::Net::EntityType> lastType; // EntityID -> type
 
-            // reliable remove retries
             std::unordered_map<std::uint32_t, PendingRemove> pendingRemoves;
 
-            // request flags
-            bool fullUpdateAllSegmentsNext { false };
+            bool fullUpdateAllSegmentsNext { false }; // kept for compatibility; FullUpdate now always sends full segments
+
+            std::unordered_set<std::uint32_t> pendingSnakeSnapshots; // entityIDs to snapshot next tick
         };
 
         std::unordered_map<UdpSession::Shared, SessionNetState> netState_;
@@ -78,6 +78,8 @@ namespace Core::App::Game
 
         void SendFullUpdate(const UdpSession::Shared & session, const EntitySnake::Shared & snake);
 
+        void SendSnakeSnapshot(const UdpSession::Shared& session, std::uint32_t entityID);
+
     public:
         void ProcessSnake(const EntitySnake::Shared & snake);
 
@@ -90,13 +92,20 @@ namespace Core::App::Game
         void GenerateFoods();
 
         static Shared Create(const BaseServiceContainer * parent, std::uint8_t serverID);
+
+    private:
+        std::string GetServiceContainerName() const override
+        {
+            return "GameServer";
+        }
     };
 
-    std::uint32_t HashBytes(const void* const data, std::size_t size);
+    // state hashes for delta filtering
+    std::uint32_t HashBytes(const void* data, std::size_t size);
 
-    std::uint32_t HashFloat(float v);
+    std::vector<sf::Vector2f> GetSnakeFullSegments(const Utils::Legacy::Game::Entity::Snake::Shared& snake);
 
-    std::uint32_t HashVector2f(const sf::Vector2f& v);
+    std::vector<sf::Vector2f> SampleSnakeValidationPoints(const Utils::Legacy::Game::Entity::Snake::Shared& snake);
 
-    std::vector<sf::Vector2f> SampleSnakeSegments(const Utils::Legacy::Game::Entity::Snake::Shared& snake);
+    bool IsSnakeVisibleByAnySegment(const EntitySnake::Shared& viewer, const EntitySnake::Shared& target, float radius);
 }

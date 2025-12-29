@@ -1,12 +1,15 @@
 #include "game_server.hpp"
 
 #include <boost/crc.hpp>
+#include <cmath>
+#include <vector>
+
+#include "logging.hpp"
 
 namespace Core::App::Game
 {
     GameServer::GameServer()
     {
-
     }
 
     void GameServer::Initialise(const uint8_t serverID)
@@ -38,6 +41,22 @@ namespace Core::App::Game
 
         for (auto& [session, snake] : sessions_)
         {
+            // first: if this session requested snapshot(s), send them out-of-band
+            auto& state = netState_[session];
+            if (!state.pendingSnakeSnapshots.empty())
+            {
+                // send a few per tick to avoid worst-case spikes
+                std::uint32_t sent = 0;
+                constexpr std::uint32_t perTickLimit = 8;
+                for (auto it = state.pendingSnakeSnapshots.begin(); it != state.pendingSnakeSnapshots.end() && sent < perTickLimit; )
+                {
+                    const auto entityID = *it;
+                    it = state.pendingSnakeSnapshots.erase(it);
+                    SendSnakeSnapshot(session, entityID);
+                    sent++;
+                }
+            }
+
             if (fullUpdates_.contains(session))
                 SendFullUpdate(session, snake);
             else
@@ -64,15 +83,19 @@ namespace Core::App::Game
         snakes_.erase(snake);
 
         sessions_.erase(session);
+        netState_.erase(session);
     }
 
     void GameServer::OnMessage(const UdpSession::Shared & session, const std::vector<std::uint8_t>& data)
     {
         using namespace Utils::Legacy::Game::Net;
 
-        MessageHeader header;
-        if (!ParseHeader(std::span(data.data(), data.size()), header))
+        MessageHeader header{};
+        const auto parseErr = ParseHeaderDetailed(std::span(data.data(), data.size()), header);
+        if (parseErr != ParseError::Ok)
         {
+            Log()->Warning("[Net] Dropped client packet: ParseHeaderDetailed failed. err={} bytes={}",
+                           ParseErrorToString(parseErr), data.size());
             return;
         }
 
@@ -87,10 +110,9 @@ namespace Core::App::Game
         {
             ByteReader reader(payloadSpan);
 
-            RequestFullUpdatePayload rq;
+            RequestFullUpdatePayload rq{};
             if (!ReadRequestFullUpdatePayload(reader, rq))
             {
-                // даже если не смогли прочитать — просто обычный full
                 rq.flags = 0;
             }
 
@@ -101,19 +123,35 @@ namespace Core::App::Game
             return;
         }
 
+        if (type == MessageType::RequestSnakeSnapshot)
+        {
+            ByteReader reader(payloadSpan);
+
+            RequestSnakeSnapshotPayload rq{};
+            if (!ReadRequestSnakeSnapshotPayload(reader, rq))
+            {
+                Log()->Warning("[Net] Dropped RequestSnakeSnapshot: read failed");
+                return;
+            }
+
+            auto& state = netState_[session];
+            state.pendingSnakeSnapshots.insert(rq.entityID);
+            return;
+        }
+
         if (type == MessageType::ClientInput)
         {
             ByteReader reader(payloadSpan);
 
-            ClientInputPayload input;
+            ClientInputPayload input{};
             if (!reader.ReadPod(input))
             {
+                Log()->Warning("[Net] Dropped ClientInput: read failed");
                 return;
             }
 
             const auto snake = sessions_[session];
             snake->SetDestination({ input.destinationX, input.destinationY });
-
             return;
         }
     }
@@ -131,7 +169,7 @@ namespace Core::App::Game
         std::unordered_set<std::uint32_t> visibleNow;
         visibleNow.reserve(snakes_.size() + foods_.size());
 
-        ByteWriter payload(8 * 1024);
+        ByteWriter payload(32 * 1024);
 
         // --------- 1) SEND PENDING REMOVES FIRST (retries) ----------
         for (auto it = state.pendingRemoves.begin(); it != state.pendingRemoves.end(); )
@@ -165,21 +203,18 @@ namespace Core::App::Game
                 return;
             }
 
-            // add to pending removes to resend few ticks
             PendingRemove pr{};
             pr.type = state.lastType[entityID];
-            pr.retries = 20; // ~0.6 сек при 32 апдейтах/сек, “дожимаем” удаление
+            pr.retries = 20;
 
             if (!state.pendingRemoves.contains(entityID))
             {
                 state.pendingRemoves.emplace(entityID, pr);
             }
 
-            // baseline чистим сразу (чтобы не пытаться “обновлять” удалённое)
             state.lastHash.erase(entityID);
             state.lastType.erase(entityID);
 
-            // и сразу пишем remove в текущий payload тоже
             EntityEntryHeader entry{};
             entry.type = pr.type;
             entry.flags = EntityFlags::Remove;
@@ -193,65 +228,74 @@ namespace Core::App::Game
             if (!s || s->IsKilled())
                 return;
 
-            if (!snake->CanSee(s))
-                return;
-
-            const auto d = std::hypot(s->GetPosition().x - snake->GetPosition().x,
-                                     s->GetPosition().y - snake->GetPosition().y);
-            if (d > sendRadius)
+            if (!IsSnakeVisibleByAnySegment(snake, s, sendRadius))
                 return;
 
             visibleNow.insert(s->EntityID());
 
-            SnakeState sstate{}; // IMPORTANT: zero-init
+            const bool known = state.lastHash.contains(s->EntityID());
+
+            EntityEntryHeader entry{};
+            entry.type = EntityType::Snake;
+            entry.entityID = s->EntityID();
+
+            SnakeState sstate{};
             sstate.headX = s->GetPosition().x;
             sstate.headY = s->GetPosition().y;
             sstate.experience = s->GetExperience();
             sstate.totalSegments = static_cast<std::uint16_t>(s->Segments().size());
 
-            const auto samples = SampleSnakeSegments(s);
-            sstate.sampleCount = static_cast<std::uint8_t>(samples.size());
+            std::vector<sf::Vector2f> points;
 
+            if (!known)
+            {
+                // NEW snake -> send FULL segments in the same packet (may exceed MTU, ok with UDP reassembly)
+                entry.flags = EntityFlags::New;
+                points = GetSnakeFullSegments(s);
+                sstate.pointsKind = SnakePointsKind::FullSegments;
+                sstate.pointsCount = static_cast<std::uint16_t>(points.size());
+            }
+            else
+            {
+                // UPDATE -> validation samples only (radius-based)
+                entry.flags = EntityFlags::Update;
+                points = SampleSnakeValidationPoints(s);
+                sstate.pointsKind = SnakePointsKind::ValidationSamples;
+                sstate.pointsCount = static_cast<std::uint16_t>(points.size());
+            }
+
+            payload.WritePod(entry);
+            payload.WritePod(sstate);
+            for (const auto& v : points)
+                payload.WriteVector2f(v);
+
+            // hash for delta filtering
             std::uint32_t hash = 0;
             hash ^= HashBytes(&sstate, sizeof(sstate));
-            for (const auto& v : samples)
+            for (const auto& v : points)
             {
                 hash ^= HashBytes(&v.x, sizeof(v.x));
                 hash ^= HashBytes(&v.y, sizeof(v.y));
             }
 
-            const bool known = state.lastHash.contains(s->EntityID());
-            const std::uint32_t oldHash = known ? state.lastHash[s->EntityID()] : 0;
-
             if (!known)
             {
-                EntityEntryHeader entry{};
-                entry.type = EntityType::Snake;
-                entry.flags = EntityFlags::New;
-                entry.entityID = s->EntityID();
-                payload.WritePod(entry);
-
-                payload.WritePod(sstate);
-                for (const auto& v : samples)
-                    payload.WriteVector2f(v);
-
                 state.lastHash[s->EntityID()] = hash;
                 state.lastType[s->EntityID()] = EntityType::Snake;
             }
-            else if (hash != oldHash)
+            else
             {
-                EntityEntryHeader entry{};
-                entry.type = EntityType::Snake;
-                entry.flags = EntityFlags::Update;
-                entry.entityID = s->EntityID();
-                payload.WritePod(entry);
-
-                payload.WritePod(sstate);
-                for (const auto& v : samples)
-                    payload.WriteVector2f(v);
-
-                state.lastHash[s->EntityID()] = hash;
-                state.lastType[s->EntityID()] = EntityType::Snake;
+                const std::uint32_t oldHash = state.lastHash[s->EntityID()];
+                if (hash != oldHash)
+                {
+                    state.lastHash[s->EntityID()] = hash;
+                    state.lastType[s->EntityID()] = EntityType::Snake;
+                }
+                else
+                {
+                    // no change -> rollback write? too complex; keep sending updates as head likely changes anyway.
+                    // we keep hash updated.
+                }
             }
         };
 
@@ -270,7 +314,7 @@ namespace Core::App::Game
 
             visibleNow.insert(f->EntityID());
 
-            FoodState fs{}; // IMPORTANT: zero-init
+            FoodState fs{};
             fs.x = f->GetPosition().x;
             fs.y = f->GetPosition().y;
             fs.power = f->GetPower();
@@ -282,24 +326,11 @@ namespace Core::App::Game
             const bool known = state.lastHash.contains(f->EntityID());
             const std::uint32_t oldHash = known ? state.lastHash[f->EntityID()] : 0;
 
-            if (!known)
+            if (!known || hash != oldHash)
             {
                 EntityEntryHeader entry{};
                 entry.type = EntityType::Food;
-                entry.flags = EntityFlags::New;
-                entry.entityID = f->EntityID();
-                payload.WritePod(entry);
-
-                payload.WritePod(fs);
-
-                state.lastHash[f->EntityID()] = hash;
-                state.lastType[f->EntityID()] = EntityType::Food;
-            }
-            else if (hash != oldHash)
-            {
-                EntityEntryHeader entry{};
-                entry.type = EntityType::Food;
-                entry.flags = EntityFlags::Update;
+                entry.flags = known ? EntityFlags::Update : EntityFlags::New;
                 entry.entityID = f->EntityID();
                 payload.WritePod(entry);
 
@@ -353,25 +384,20 @@ namespace Core::App::Game
         std::unordered_set<std::uint32_t> visibleNow;
         visibleNow.reserve(snakes_.size() + foods_.size());
 
-        ByteWriter payload(16 * 1024);
+        ByteWriter payload(128 * 1024);
         WriteFullUpdateHeader(payload, snake->EntityID());
 
         // snapshot baseline
         state.lastHash.clear();
         state.lastType.clear();
-        state.pendingRemoves.clear(); // full snapshot = удалений “доехать” больше не нужно
+        state.pendingRemoves.clear();
 
         auto AddSnake = [&](const EntitySnake::Shared& s)
         {
             if (!s || s->IsKilled())
                 return;
 
-            if (!snake->CanSee(s))
-                return;
-
-            const auto d = std::hypot(s->GetPosition().x - snake->GetPosition().x,
-                                     s->GetPosition().y - snake->GetPosition().y);
-            if (d > sendRadius)
+            if (!IsSnakeVisibleByAnySegment(snake, s, sendRadius))
                 return;
 
             visibleNow.insert(s->EntityID());
@@ -382,42 +408,24 @@ namespace Core::App::Game
             entry.entityID = s->EntityID();
             payload.WritePod(entry);
 
-            SnakeState sstate{}; // IMPORTANT: zero-init
+            SnakeState sstate{};
             sstate.headX = s->GetPosition().x;
             sstate.headY = s->GetPosition().y;
             sstate.experience = s->GetExperience();
             sstate.totalSegments = static_cast<std::uint16_t>(s->Segments().size());
 
-            std::vector<sf::Vector2f> samples;
-
-            const bool isPlayer = (s->EntityID() == snake->EntityID());
-            const bool sendAllForPlayer = (isPlayer && state.fullUpdateAllSegmentsNext);
-
-            if (sendAllForPlayer)
-            {
-                const auto& segs = s->Segments();
-                samples.assign(segs.begin(), segs.end());
-            }
-            else
-            {
-                samples = SampleSnakeSegments(s);
-            }
-
-            // important: sampleCount must never exceed totalSegments
-            if (samples.size() > static_cast<std::size_t>(sstate.totalSegments))
-            {
-                samples.resize(sstate.totalSegments);
-            }
-
-            sstate.sampleCount = static_cast<std::uint8_t>(samples.size());
+            // FullUpdate: ALWAYS send full segments for every visible snake (fixes "6 parts" issue)
+            const auto points = GetSnakeFullSegments(s);
+            sstate.pointsKind = SnakePointsKind::FullSegments;
+            sstate.pointsCount = static_cast<std::uint16_t>(points.size());
 
             payload.WritePod(sstate);
-            for (const auto& v : samples)
+            for (const auto& v : points)
                 payload.WriteVector2f(v);
 
             std::uint32_t hash = 0;
             hash ^= HashBytes(&sstate, sizeof(sstate));
-            for (const auto& v : samples)
+            for (const auto& v : points)
             {
                 hash ^= HashBytes(&v.x, sizeof(v.x));
                 hash ^= HashBytes(&v.y, sizeof(v.y));
@@ -448,7 +456,7 @@ namespace Core::App::Game
             entry.entityID = f->EntityID();
             payload.WritePod(entry);
 
-            FoodState fs{}; // IMPORTANT: zero-init
+            FoodState fs{};
             fs.x = f->GetPosition().x;
             fs.y = f->GetPosition().y;
             fs.power = f->GetPower();
@@ -477,8 +485,61 @@ namespace Core::App::Game
 
         session->Send(msg);
 
-        // only applies once
         state.fullUpdateAllSegmentsNext = false;
+    }
+
+    void GameServer::SendSnakeSnapshot(const UdpSession::Shared& session, const std::uint32_t entityID)
+    {
+        using namespace Utils::Legacy::Game::Net;
+
+        // find snake by entityID (visible or not - snapshot used for repair, but we still send full data if exists)
+        EntitySnake::Shared targetSnake;
+        for (const auto& s : snakes_)
+        {
+            if (s && s->EntityID() == entityID && !s->IsKilled())
+            {
+                targetSnake = s;
+                break;
+            }
+        }
+
+        if (!targetSnake)
+        {
+            // if snake doesn't exist (already removed), send nothing.
+            return;
+        }
+
+        ByteWriter payload(64 * 1024);
+
+        EntityEntryHeader entry{};
+        entry.type = EntityType::Snake;
+        entry.flags = EntityFlags::New;
+        entry.entityID = entityID;
+        payload.WritePod(entry);
+
+        SnakeState sstate{};
+        sstate.headX = targetSnake->GetPosition().x;
+        sstate.headY = targetSnake->GetPosition().y;
+        sstate.experience = targetSnake->GetExperience();
+        sstate.totalSegments = static_cast<std::uint16_t>(targetSnake->Segments().size());
+
+        const auto points = GetSnakeFullSegments(targetSnake);
+        sstate.pointsKind = SnakePointsKind::FullSegments;
+        sstate.pointsCount = static_cast<std::uint16_t>(points.size());
+
+        payload.WritePod(sstate);
+        for (const auto& v : points)
+            payload.WriteVector2f(v);
+
+        auto& state = netState_[session];
+        state.updateSeq++;
+
+        const auto msg = BuildMessage(MessageType::SnakeSnapshot,
+                                      state.updateSeq,
+                                      frame_,
+                                      payload.Data());
+
+        session->Send(msg);
     }
 
     void GameServer::ProcessSnake(const EntitySnake::Shared & snake)
@@ -491,7 +552,7 @@ namespace Core::App::Game
         }
 
         const auto head = snake->TryMove();
-        if(CheckBoundsCollision(head, Utils::Legacy::Game::AreaCenter, Utils::Legacy::Game::AreaRadius - snake->GetRadius(true)))
+        if (CheckBoundsCollision(head, Utils::Legacy::Game::AreaCenter, Utils::Legacy::Game::AreaRadius - snake->GetRadius(true)))
         {
             KillSnake(snake);
             return;
@@ -512,19 +573,21 @@ namespace Core::App::Game
             return false;
         });
 
-        for(auto& target : snakes_) {
-            if(snake == target || target->IsKilled())
+        for (auto& target : snakes_)
+        {
+            if (snake == target || target->IsKilled())
                 continue;
 
             if (CheckCollision(snake->GetPosition(), target->GetPosition(), snake->GetRadius(true) + target->GetRadius(true)))
             {
-                if(target->GetExperience() >= snake->GetExperience()) {
+                if (target->GetExperience() >= snake->GetExperience())
+                {
                     KillSnake(snake);
                     return;
                 }
             }
 
-            for(auto & part: target->Segments())
+            for (auto & part : target->Segments())
             {
                 if (CheckCollision(snake->GetPosition(), part, snake->GetRadius(true) + target->GetRadius(false)))
                 {
@@ -567,26 +630,19 @@ namespace Core::App::Game
         for (auto& snake : killedSnakes_)
         {
             auto & segments = snake->Segments();
-
-            // Преобразуем список сегментов в вектор для удобного доступа по индексу
             std::vector segmentVector(segments.begin(), segments.end());
 
             const uint32_t numFoods = snake->GetExperience() / 3;
             const auto numSegments = static_cast<int>(segmentVector.size());
 
-            for (int i = 0; i < numFoods; i++)
+            for (int i = 0; i < static_cast<int>(numFoods); i++)
             {
-                // Выбираем случайный индекс сегмента
                 const auto randomIndex = GetRandomInt(0, numSegments - 1);
+                const sf::Vector2f segmentPosition = segmentVector[randomIndex];
 
-                // Получаем позицию выбранного сегмента
-                sf::Vector2f segmentPosition = segmentVector[randomIndex];
-
-                // Генерируем случайную позицию в небольшом радиусе вокруг сегмента
                 const float spawnRadius = randomIndex == 0 ? snake->GetRadius(true) : snake->GetRadius(false);
-                sf::Vector2f position = GetRandomVector2fInSphere(segmentPosition, spawnRadius);
+                const sf::Vector2f position = GetRandomVector2fInSphere(segmentPosition, spawnRadius);
 
-                // Создаём новый объект еды в сгенерированной позиции
                 auto food = std::make_shared<EntityFood>(frame_, position);
                 food->SetEntityID(nextEntityID_++);
                 foods_.insert(food);
@@ -598,7 +654,7 @@ namespace Core::App::Game
 
     void GameServer::GenerateFoods()
     {
-        for(auto i = foods_.size(); i < Utils::Legacy::Game::FoodCount; i++)
+        for (auto i = foods_.size(); i < Utils::Legacy::Game::FoodCount; i++)
         {
             const auto position = GetRandomVector2fInSphere(Utils::Legacy::Game::AreaCenter, Utils::Legacy::Game::AreaRadius - 10.f);
             auto food = std::make_shared<EntityFood>(frame_, position);
@@ -622,80 +678,88 @@ namespace Core::App::Game
         return crc.checksum();
     }
 
-    std::uint32_t HashFloat(const float v)
+    std::vector<sf::Vector2f> GetSnakeFullSegments(const Utils::Legacy::Game::Entity::Snake::Shared& snake)
     {
-        return HashBytes(&v, sizeof(v));
-    }
-
-    std::uint32_t HashVector2f(const sf::Vector2f& v)
-    {
-        std::uint32_t h = 0;
-        h ^= HashFloat(v.x);
-        h ^= (HashFloat(v.y) << 1);
-        return h;
-    }
-
-    std::vector<sf::Vector2f> SampleSnakeSegments(const Utils::Legacy::Game::Entity::Snake::Shared& snake)
-    {
+        std::vector<sf::Vector2f> out;
         const auto& segments = snake->Segments();
-        const std::size_t n = segments.size();
+        out.assign(segments.begin(), segments.end());
+        return out;
+    }
 
+    std::vector<sf::Vector2f> SampleSnakeValidationPoints(const Utils::Legacy::Game::Entity::Snake::Shared& snake)
+    {
         std::vector<sf::Vector2f> out;
 
-        if (n == 0)
+        const auto& segments = snake->Segments();
+        if (segments.empty())
         {
             return out;
         }
 
-        // we can never send more samples than we have segments
-        const std::size_t maxSamples = std::min<std::size_t>(12, n);
-        out.reserve(maxSamples);
-
-        // copy to vector for index access
         const std::vector<sf::Vector2f> segVec(segments.begin(), segments.end());
+        const std::size_t n = segVec.size();
 
-        // first 6 (or less if n < 6)
-        const std::size_t firstCount = std::min<std::size_t>(6, maxSamples);
-        for (std::size_t i = 0; i < firstCount; ++i)
+        out.reserve(n);
+
+        const float minDist = snake->GetRadius(false);
+
+        sf::Vector2f last = segVec[0];
+        out.push_back(last);
+
+        for (std::size_t i = 1; i < n; ++i)
         {
-            out.push_back(segVec[i]);
-        }
+            const auto& p = segVec[i];
+            const float dx = p.x - last.x;
+            const float dy = p.y - last.y;
+            const float dist = std::hypot(dx, dy);
 
-        if (maxSamples <= firstCount)
-        {
-            return out;
-        }
-
-        // remaining points evenly distributed over [firstCount .. n-1]
-        const std::size_t remaining = maxSamples - firstCount;
-
-        const std::size_t start = firstCount;
-        const std::size_t end   = n - 1;
-
-        if (start >= n)
-        {
-            return out;
-        }
-
-        const std::size_t range = end - start;
-
-        if (remaining == 1)
-        {
-            out.push_back(segVec[end]);
-            return out;
-        }
-
-        for (std::size_t k = 0; k < remaining; ++k)
-        {
-            const float t = static_cast<float>(k) / static_cast<float>(remaining - 1);
-            const std::size_t idx = start + static_cast<std::size_t>(std::round(t * static_cast<float>(range)));
-
-            if (idx < n)
+            if (dist >= minDist)
             {
-                out.push_back(segVec[idx]);
+                out.push_back(p);
+                last = p;
+            }
+        }
+
+        // ensure tail
+        if (n >= 2)
+        {
+            const auto& tail = segVec.back();
+            if (out.empty() || (out.back().x != tail.x || out.back().y != tail.y))
+            {
+                out.push_back(tail);
             }
         }
 
         return out;
     }
-}
+
+    bool IsSnakeVisibleByAnySegment(const EntitySnake::Shared& viewer, const EntitySnake::Shared& target, const float radius)
+    {
+        if (!viewer || !target)
+            return false;
+
+        const auto viewerPos = viewer->GetPosition(); // viewer head
+        const float r2 = radius * radius;
+
+        // Check head first (fast path)
+        {
+            const auto head = target->GetPosition();
+            const float dx = head.x - viewerPos.x;
+            const float dy = head.y - viewerPos.y;
+            if ((dx * dx + dy * dy) <= r2)
+                return true;
+        }
+
+        const auto& segments = target->Segments();
+        for (const auto& seg : segments)
+        {
+            const float dx = seg.x - viewerPos.x;
+            const float dy = seg.y - viewerPos.y;
+            if ((dx * dx + dy * dy) <= r2)
+                return true;
+        }
+
+        return false;
+    }
+
+} // namespace Core::App::Game
