@@ -2,6 +2,7 @@
 
 #include <boost/crc.hpp>
 #include <cmath>
+#include <ranges>
 #include <vector>
 
 #include "logging.hpp"
@@ -14,6 +15,8 @@ namespace Core::App::Game
 
     void GameServer::Initialise(const uint8_t serverID)
     {
+        serverID_ = serverID;
+
         Utils::Net::Udp::ServerConfig cfg;
         cfg.address = "0.0.0.0";
         cfg.port = 7777 + serverID;
@@ -73,6 +76,7 @@ namespace Core::App::Game
         snake->SetEntityID(nextEntityID_++);
         snakes_.insert(snake);
         sessions_[session] = snake;
+        sessionsByID_[session->SessionId()] = session;
 
         RespawnSnake(snake);
     }
@@ -82,6 +86,9 @@ namespace Core::App::Game
         const auto snake = sessions_[session];
         snakes_.erase(snake);
 
+        const auto sessionID = session->SessionId();
+        sessionsByID_.erase(sessionID);
+        players_.erase(sessionID);
         sessions_.erase(session);
         netState_.erase(session);
     }
@@ -632,7 +639,7 @@ namespace Core::App::Game
             auto & segments = snake->Segments();
             std::vector segmentVector(segments.begin(), segments.end());
 
-            const uint32_t numFoods = snake->GetExperience() / 3;
+            const uint32_t numFoods = snake->GetExperience() / 15;
             const auto numSegments = static_cast<int>(segmentVector.size());
 
             for (int i = 0; i < static_cast<int>(numFoods); i++)
@@ -643,7 +650,7 @@ namespace Core::App::Game
                 const float spawnRadius = randomIndex == 0 ? snake->GetRadius(true) : snake->GetRadius(false);
                 const sf::Vector2f position = GetRandomVector2fInSphere(segmentPosition, spawnRadius);
 
-                auto food = std::make_shared<EntityFood>(frame_, position);
+                auto food = std::make_shared<EntityFood>(frame_, position, 10);
                 food->SetEntityID(nextEntityID_++);
                 foods_.insert(food);
             }
@@ -661,6 +668,63 @@ namespace Core::App::Game
             food->SetEntityID(nextEntityID_++);
             foods_.insert(food);
         }
+    }
+
+    uint32_t GameServer::GetServerID() const
+    {
+        return serverID_;
+    }
+
+    uint32_t GameServer::GetPlayersCount() const
+    {
+        return sessions_.size();
+    }
+
+    void GameServer::SetSSIDPlayer(const uint64_t ssid, const Player::Shared & player)
+    {
+        Log()->Debug("SetSSIDPlayer serverId {} session {} connected with {}", serverID_, ssid, player->Model()->GetLogin());
+
+        // for (const auto & [ssid, assignedPlayer] : players_)
+        // {
+        //     if (assignedPlayer == player)
+        //     {
+        //         session->Close();
+        //     }
+        // }
+
+        // for (const auto &session: sessions_ | std::views::keys)
+        // {
+        //     if (session->SessionId() == ssid)
+        //     {
+        //         Log()->Debug("Success SetSSIDPlayer");
+        //         players_[ssid] = player;
+        //     }
+        // }
+
+        players_[ssid] = player;
+    }
+
+    std::unordered_map<Player::Shared, uint32_t> GameServer::GetLeaderboard()
+    {
+        std::unordered_map<Player::Shared, uint32_t> leaderboard;
+
+        Log()->Debug("GetLeaderboard: {} {}", serverID_, players_.size());
+
+        for (const auto & [ssid, player] : players_)
+        {
+            if (!sessionsByID_.contains(ssid))
+                continue;
+
+            const auto session = sessionsByID_[ssid];
+
+            const auto snake = sessions_[session];
+            if (!snake->IsKilled())
+            {
+                leaderboard[player] = snake->GetExperience();
+            }
+        }
+
+        return leaderboard;
     }
 
     GameServer::Shared GameServer::Create(const BaseServiceContainer * parent, const uint8_t serverID)

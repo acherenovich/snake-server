@@ -4,7 +4,7 @@ namespace Core::App::Game
 {
     void Controller::Initialise()
     {
-        for (const auto serverID: {1, 2, 3, 4})
+        for (const auto serverID: {1, 2, 3})
             gameServers_.push_back(GameServer::Create(this, serverID));
     }
 
@@ -23,4 +23,15 @@ namespace Core::App::Game
         for (const auto& gameServer_: gameServers_)
             gameServer_->ProcessTick();
     }
+
+    std::vector<Interface::GameServer::Shared> Controller::GetGameServers() const
+    {
+        std::vector<Interface::GameServer::Shared> gameServers;
+        gameServers.reserve(gameServers_.size());
+        for (const auto& gameServer_: gameServers_)
+            gameServers.emplace_back(gameServer_);
+
+        return gameServers;
+    }
+
 }

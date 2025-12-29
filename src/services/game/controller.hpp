@@ -26,6 +26,9 @@ namespace Core::App::Game
         void OnAllInterfacesLoaded() override;
 
         void ProcessTick() override;
+
+        [[nodiscard]] std::vector<Interface::GameServer::Shared> GetGameServers() const override;
+
     private:
         std::string GetServiceContainerName() const override
         {

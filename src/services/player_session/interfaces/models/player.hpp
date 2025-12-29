@@ -22,6 +22,8 @@ namespace Core::App::PlayerSession::Model
 
             virtual Utils::Task<bool> Login(std::string token) = 0;
 
+            [[nodiscard]] virtual std::string GetLogin() const = 0;
+
             enum SerialiseType
             {
                 SerialisePlayer,

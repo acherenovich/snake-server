@@ -32,6 +32,9 @@ namespace Core::App::PlayerSession::Model
 
         Utils::Task<bool> Login(std::string token) override;
 
+        std::string GetLogin() const override;
+
+
         [[nodiscard]] boost::json::object Serialise(const SerialiseType & serialiseType = SerialisePlayer) override;
 
     private:

@@ -54,7 +54,7 @@ namespace Core::App::PlayerSession::Requests {
 
         ~RequestsServiceInstance() override = default;
 
-        void OnAllInterfacesLoaded() override
+        void OnAllInterfacesLoaded() final
         {
             server_ = IFace().Get<Server>();
 
@@ -73,7 +73,11 @@ namespace Core::App::PlayerSession::Requests {
                     SendFail(player, "internal_server_error");
                 }
             });
+
+            OnAllInterfacesLoadedPost();
         }
+
+        virtual void OnAllInterfacesLoadedPost() {};
 
         uint64_t SendResponse(const Interface::Player::Shared & player, const boost::json::object & message, const uint64_t targetJobID = 0)
         {

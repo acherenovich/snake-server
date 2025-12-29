@@ -103,6 +103,11 @@ namespace Core::App::PlayerSession::Model
         co_return true;
     }
 
+    std::string Player::GetLogin() const
+    {
+        return login_;
+    }
+
     [[nodiscard]] boost::json::object Player::Serialise(const SerialiseType & serialiseType)
     {
         boost::json::object result;

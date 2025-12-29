@@ -28,6 +28,8 @@ namespace Core::App::Game
         UdpServer::Shared udpServer_;
 
         std::unordered_map<UdpSession::Shared, EntitySnake::Shared> sessions_;
+        std::unordered_map<uint64_t, UdpSession::Shared> sessionsByID_;
+        std::unordered_map<uint64_t, Player::Shared> players_;
         std::unordered_set<EntitySnake::Shared> killedSnakes_;
 
         std::unordered_set<UdpSession::Shared> fullUpdates_;
@@ -58,6 +60,7 @@ namespace Core::App::Game
 
         float visibilityPaddingPercent_ { 0.20f };
 
+        uint32_t serverID_ = 0;
     public:
         using Shared = std::shared_ptr<GameServer>;
 
@@ -91,8 +94,16 @@ namespace Core::App::Game
 
         void GenerateFoods();
 
-        static Shared Create(const BaseServiceContainer * parent, std::uint8_t serverID);
+    public:
+        [[nodiscard]] uint32_t GetServerID() const override;
 
+        [[nodiscard]] uint32_t GetPlayersCount() const override;
+
+        void SetSSIDPlayer(uint64_t ssid, const Player::Shared & player) override;
+
+        std::unordered_map<Player::Shared, uint32_t> GetLeaderboard() override;
+
+        static Shared Create(const BaseServiceContainer * parent, std::uint8_t serverID);
     private:
         std::string GetServiceContainerName() const override
         {
