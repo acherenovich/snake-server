@@ -42,11 +42,13 @@ namespace Core::App::PlayerSession::Requests {
         }
 
         boost::json::array sessionsJson;
-        for (const auto& gameServer: gameController_->GetGameServers())
+        for (const auto& [serverID, gameServer]: gameController_->GetGameServers())
         {
             boost::json::object session;
-            session["id"] = gameServer->GetServerID();
+            session["id"]      = serverID;
             session["players"] = gameServer->GetPlayersCount();
+            session["host"]    = gameServer->GetHost();
+            session["port"]    = gameServer->GetPort();
             sessionsJson.push_back(session);
         }
 

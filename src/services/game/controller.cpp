@@ -2,11 +2,7 @@
 
 namespace Core::App::Game
 {
-    void Controller::Initialise()
-    {
-        for (const auto serverID: {1, 2, 3})
-            gameServers_.push_back(GameServer::Create(this, serverID));
-    }
+    void Controller::Initialise() {}
 
     void Controller::OnAllServicesLoaded()
     {
@@ -15,23 +11,137 @@ namespace Core::App::Game
 
     void Controller::OnAllInterfacesLoaded()
     {
-        websocket_ = IFace().Get<Server>();
+        websocket_      = IFace().Get<WsServer>();
+        internalServer_ = IFace().Get<IntServer>();
+
+        internalServer_->RegisterMessage(
+            "internal::register",
+            [this](const Client::Shared& client, const Message::Shared& msg) {
+                HandleRegister(client, msg);
+            });
+
+        internalServer_->RegisterMessage(
+            "internal::stats",
+            [this](const Client::Shared& client, const Message::Shared& msg) {
+                HandleStats(client, msg);
+            });
+
+        internalServer_->RegisterClientsCallback(
+            [this](const Client::Shared& client, Client::Events event) {
+                if (event == Client::Events::ClientDisconnected)
+                    HandleReplicaDisconnected(client);
+            });
     }
 
-    void Controller::ProcessTick()
+    void Controller::ProcessTick() {}
+
+    std::map<uint32_t, Interface::GameServer::Shared> Controller::GetGameServers() const
     {
-        for (const auto& gameServer_: gameServers_)
-            gameServer_->ProcessTick();
+        std::map<uint32_t, Interface::GameServer::Shared> result;
+        for (const auto& s : gameServers_)
+            result[s->GetServerID()] = s;
+        return result;
     }
 
-    std::vector<Interface::GameServer::Shared> Controller::GetGameServers() const
+    void Controller::HandleRegister(const Client::Shared& client, const Message::Shared& msg)
     {
-        std::vector<Interface::GameServer::Shared> gameServers;
-        gameServers.reserve(gameServers_.size());
-        for (const auto& gameServer_: gameServers_)
-            gameServers.emplace_back(gameServer_);
+        auto& body = msg->GetBody();
 
-        return gameServers;
+        std::string host = "127.0.0.1";
+        if (body.contains("host") && body.at("host").is_string())
+            host = std::string(body.at("host").as_string());
+
+        boost::json::array globalIds;
+
+        if (body.contains("instances") && body.at("instances").is_array())
+        {
+            for (const auto& inst : body.at("instances").as_array())
+            {
+                if (!inst.is_object()) continue;
+                const auto& obj = inst.as_object();
+
+                const uint32_t localId = obj.contains("localId")
+                    ? static_cast<uint32_t>(obj.at("localId").as_int64()) : 0;
+                const uint16_t port = obj.contains("port")
+                    ? static_cast<uint16_t>(obj.at("port").as_int64()) : 0;
+
+                const uint32_t globalId = nextGlobalId_++;
+
+                auto server = RemoteGameServer::Create(this, globalId, host, port, client);
+                gameServers_.push_back(server);
+                replicaServers_[client].push_back(server);
+
+                globalIds.push_back(boost::json::object{
+                    {"localId",  static_cast<int64_t>(localId)},
+                    {"globalId", static_cast<int64_t>(globalId)}
+                });
+
+                Log()->Msg("Replica registered: host={} port={} globalId={}", host, port, globalId);
+            }
+        }
+
+        const uint64_t sourceJobId = msg->GetHeaders()->GetSourceJobID();
+        client->Send("internal::register::response", {
+            {"success",   true},
+            {"globalIds", globalIds}
+        }, sourceJobId);
     }
 
-}
+    void Controller::HandleStats(const Client::Shared& /*client*/, const Message::Shared& msg)
+    {
+        auto& body = msg->GetBody();
+        if (!body.contains("instances") || !body.at("instances").is_array())
+            return;
+
+        for (const auto& inst : body.at("instances").as_array())
+        {
+            if (!inst.is_object()) continue;
+            const auto& obj = inst.as_object();
+
+            if (!obj.contains("globalId")) continue;
+            const uint32_t globalId = static_cast<uint32_t>(obj.at("globalId").as_int64());
+
+            uint32_t playerCount = 0;
+            if (obj.contains("playerCount"))
+                playerCount = static_cast<uint32_t>(obj.at("playerCount").as_int64());
+
+            std::vector<std::pair<std::string, uint32_t>> leaderboard;
+            if (obj.contains("leaderboard") && obj.at("leaderboard").is_array())
+            {
+                for (const auto& entry : obj.at("leaderboard").as_array())
+                {
+                    if (!entry.is_object()) continue;
+                    const auto& eobj = entry.as_object();
+                    std::string login = eobj.contains("login")
+                        ? std::string(eobj.at("login").as_string()) : "";
+                    uint32_t exp = eobj.contains("exp")
+                        ? static_cast<uint32_t>(eobj.at("exp").as_int64()) : 0;
+                    leaderboard.emplace_back(login, exp);
+                }
+            }
+
+            for (const auto& server : gameServers_)
+            {
+                if (server->GetServerID() == globalId)
+                {
+                    server->UpdateStats(playerCount, std::move(leaderboard));
+                    break;
+                }
+            }
+        }
+    }
+
+    void Controller::HandleReplicaDisconnected(const Client::Shared& client)
+    {
+        if (!replicaServers_.contains(client))
+            return;
+
+        for (const auto& s : replicaServers_.at(client))
+        {
+            std::erase(gameServers_, s);
+            Log()->Msg("Removed remote game server globalId={}", s->GetServerID());
+        }
+        replicaServers_.erase(client);
+    }
+
+} // namespace Core::App::Game

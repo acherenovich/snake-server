@@ -14,7 +14,7 @@ namespace Core::App::Game
         public:
             using Shared = std::shared_ptr<Controller>;
 
-            [[nodiscard]] virtual std::vector<GameServer::Shared> GetGameServers() const = 0;
+            [[nodiscard]] virtual std::map<uint32_t, GameServer::Shared> GetGameServers() const = 0;
         };
     }
 }

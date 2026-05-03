@@ -32,12 +32,11 @@ namespace Core::Servers::Websocket {
         WebsocketService() = default;
         ~WebsocketService() override = default;
 
-    protected:
         void Initialise() override;
         void OnAllServicesLoaded() override;
         void OnAllInterfacesLoaded() override;
         void ProcessTick() override;
-    public:
+
         void OnSessionConnected(const Net::Session::Shared & session) override;
         void OnSessionDisconnected(const Net::Session::Shared & session) override;
         void OnMessage(const Net::Session::Shared & session, const boost::json::value & jsonValue) override;
@@ -51,13 +50,12 @@ namespace Core::Servers::Websocket {
             return server_;
         }
 
-    private:
-
         std::string GetServiceContainerName() const override
         {
             return "NET-WS";
         }
 
+    private:
         Client::Shared GetClient(const Net::Session::Shared & session)
         {
             if (const auto it = clients_.find(session); it != clients_.end())

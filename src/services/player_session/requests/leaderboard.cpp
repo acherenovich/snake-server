@@ -48,20 +48,18 @@ namespace Core::App::PlayerSession::Requests {
         if (!request.contains("serverId") || !request["serverId"].is_int64())
             return SendFail(player, "error", sourceJobID);
 
-        uint32_t serverID = request["serverId"].as_int64();
+        const uint32_t serverID = request["serverId"].as_int64();
 
         const auto servers = gameController_->GetGameServers();
-        if (serverID > servers.size())
-            return SendFail(player, "error", sourceJobID);
-
-        auto leaderboard = servers[serverID - 1]->GetLeaderboard();
+        if (!servers.contains(serverID))
+            return SendFail(player, "server_not_found", sourceJobID);
 
         boost::json::array sessionsJson;
-        for (auto & [targetPlayer, exp]: leaderboard)
+        for (auto & [name, exp]: servers.at(serverID)->GetLeaderboard())
         {
             boost::json::object row;
-            row["name"] = targetPlayer->Model()->GetLogin();
-            row["exp"] = exp;
+            row["name"] = name;
+            row["exp"]  = exp;
             sessionsJson.push_back(row);
         }
 

@@ -55,12 +55,7 @@ set(VSHARED_ENABLE_SERVICE_LOADER   ON CACHE BOOL "" FORCE)
 set(VSHARED_ENABLE_COROUTINE        ON CACHE BOOL "" FORCE)
 set(VSHARED_ENABLE_MYSQL            ON CACHE BOOL "" FORCE)
 set(VSHARED_ENABLE_CRYPT            ON CACHE BOOL "" FORCE)
-set(VSHARED_ENABLE_LEGACY_GAME      ON CACHE BOOL "" FORCE)
-
-find_package(SFML 2.6
-        COMPONENTS system
-        CONFIG REQUIRED
-)
+set(VSHARED_ENABLE_LEGACY_GAME      OFF CACHE BOOL "" FORCE)
 
 # ===============================
 # Includes / subprojects
@@ -86,7 +81,6 @@ add_executable(snake-server
 target_link_libraries(snake-server
         PRIVATE
         snake-shared::all
-        sfml-system
 )
 
 # WinSock symbols (Boost.Asio/Beast на Windows)

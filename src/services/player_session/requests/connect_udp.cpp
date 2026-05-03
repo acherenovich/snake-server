@@ -49,10 +49,10 @@ namespace Core::App::PlayerSession::Requests {
         uint32_t serverID = request["serverId"].as_int64();
 
         const auto servers = gameController_->GetGameServers();
-        if (serverID > servers.size())
-            return SendFail(player, "error", sourceJobID);
+        if (!servers.contains(serverID))
+            return SendFail(player, "server_not_found", sourceJobID);
 
-        servers[serverID - 1]->SetSSIDPlayer(ssid, player);
+        servers.at(serverID)->SetSSIDPlayer(ssid, player);
 
         SendSuccess(player, {}, sourceJobID);
     }
