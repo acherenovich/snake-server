@@ -7,10 +7,10 @@
 #   docker build -t snake-server:latest .
 #
 # Run:
-#   docker run --rm -p 9100:9100 -p 9000:9000/udp snake-server:latest
+#   docker run --rm -p 9100:9100 -p 9101:9101 snake-server:latest
 #
 # Notes:
-# - Project uses Boost (system,json), OpenSSL, MySQL client, SFML (system).
+# - Project uses Boost (system,json), OpenSSL, MySQL client.
 # - Server is built as a static-ish binary (BUILD_SHARED_LIBS OFF), but runtime
 #   still needs some dynamic libs depending on toolchain / distro.
 # - CMake minimum is 3.27 => we install a newer CMake via kitware APT repo.
@@ -48,18 +48,12 @@ RUN set -eux; \
     rm -rf /var/lib/apt/lists/*
 
 # --- Dependencies required by CMakeLists.txt ---
-# Boost: system,json
-# OpenSSL: SSL/Crypto
-# MySQL: libmysqlclient-dev
-# SFML: sfml-system (and deps)
-# Extra: zlib, pthread is part of libc, etc.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     g++ \
     libboost-system-dev \
     libboost-json-dev \
     libssl-dev \
-    libmysqlclient-dev \
-    libsfml-dev \
+    default-libmysqlclient-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # --- Workdir & sources ---
@@ -73,7 +67,7 @@ RUN set -eux; \
     cmake -S . -B build \
       -G Ninja \
       -DCMAKE_BUILD_TYPE=Release;  \
-    cmake --build build -j"$(nproc)"; \
+    cmake --build build -j2; \
     test -f /src/snake-server
 
 ############################
@@ -86,7 +80,6 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Runtime libs:
 # - OpenSSL runtime
 # - libmysqlclient runtime
-# - SFML runtime
 # - Boost runtime (system/json)
 # We install minimal runtime packages. If you fully static-link everything,
 # you can reduce this list further.
@@ -94,7 +87,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     libssl3 \
     libmysqlclient21 \
-    libsfml-system2.6 \
     libboost-system1.83.0 \
     libboost-json1.83.0 \
     && rm -rf /var/lib/apt/lists/*
@@ -108,9 +100,7 @@ COPY --from=builder /src/snake-server /app/snake-server
 # COPY --from=builder /src/config /app/config
 
 EXPOSE 9100/tcp
-EXPOSE 7778/udp
-EXPOSE 7779/udp
-EXPOSE 7780/udp
+EXPOSE 9101/tcp
 
 # Recommended: run as non-root
 RUN useradd -m -u 10001 appuser

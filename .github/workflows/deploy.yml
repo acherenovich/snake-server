@@ -1,0 +1,100 @@
+name: Deploy stack
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Image tag for snake-server
+        required: false
+        default: latest
+      game_image_tag:
+        description: Image tag for snake-game-server
+        required: false
+        default: latest
+
+permissions:
+  contents: read
+
+env:
+  STACK_NAME: snake
+  REGISTRY_IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare SSH
+        run: |
+          mkdir -p ~/.ssh
+          install -m 600 /dev/null ~/.ssh/deploy_key
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          ssh-keyscan -p "${{ secrets.DEPLOY_SSH_PORT || '22' }}" "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Copy stack file
+        run: |
+          scp -P "${{ secrets.DEPLOY_SSH_PORT || '22' }}" \
+            -i ~/.ssh/deploy_key \
+            deploy/stack.yml \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/tmp/snake-stack.yml"
+
+      - name: Copy deployment environment
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
+          GAME_IMAGE_TAG: ${{ inputs.game_image_tag }}
+          MYSQL_HOST: ${{ secrets.MYSQL_HOST }}
+          MYSQL_PORT: ${{ secrets.MYSQL_PORT }}
+          MYSQL_USER: ${{ secrets.MYSQL_USER }}
+          MYSQL_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
+          MYSQL_DATABASE: ${{ secrets.MYSQL_DATABASE }}
+          MYSQL_THREADS: ${{ secrets.MYSQL_THREADS }}
+          SNAKE_PUBLIC_HOST: ${{ secrets.SNAKE_PUBLIC_HOST }}
+          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+        run: |
+          {
+            printf 'REGISTRY_IMAGE_PREFIX=%q\n' "$REGISTRY_IMAGE_PREFIX"
+            printf 'IMAGE_TAG=%q\n' "$IMAGE_TAG"
+            printf 'GAME_IMAGE_TAG=%q\n' "$GAME_IMAGE_TAG"
+            printf 'MYSQL_HOST=%q\n' "$MYSQL_HOST"
+            printf 'MYSQL_PORT=%q\n' "${MYSQL_PORT:-3306}"
+            printf 'MYSQL_USER=%q\n' "$MYSQL_USER"
+            printf 'MYSQL_PASSWORD=%q\n' "$MYSQL_PASSWORD"
+            printf 'MYSQL_DATABASE=%q\n' "$MYSQL_DATABASE"
+            printf 'MYSQL_THREADS=%q\n' "${MYSQL_THREADS:-1}"
+            printf 'SNAKE_PUBLIC_HOST=%q\n' "$SNAKE_PUBLIC_HOST"
+            printf 'GHCR_USERNAME=%q\n' "$GHCR_USERNAME"
+            printf 'GHCR_TOKEN=%q\n' "$GHCR_TOKEN"
+            printf 'STACK_NAME=%q\n' "$STACK_NAME"
+          } > /tmp/snake-stack.env
+
+          scp -P "${{ secrets.DEPLOY_SSH_PORT || '22' }}" \
+            -i ~/.ssh/deploy_key \
+            /tmp/snake-stack.env \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/tmp/snake-stack.env"
+
+      - name: Deploy
+        run: |
+          ssh -p "${{ secrets.DEPLOY_SSH_PORT || '22' }}" \
+            -i ~/.ssh/deploy_key \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            'bash -s' <<'REMOTE'
+          set -euo pipefail
+          set -a
+          . /tmp/snake-stack.env
+          set +a
+
+          if [ -n "${GHCR_USERNAME:-}" ] && [ -n "${GHCR_TOKEN:-}" ]; then
+            printf '%s\n' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
+          fi
+
+          docker stack deploy \
+            --with-registry-auth \
+            -c /tmp/snake-stack.yml \
+            "$STACK_NAME"
+
+          docker stack services "$STACK_NAME"
+          REMOTE

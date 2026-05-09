@@ -1,0 +1,17 @@
+.git
+.github
+.idea
+cmake-build-*
+build
+deploy
+snake-server
+*.exe
+*.out
+*.app
+*.dSYM
+*.o
+*.obj
+*.a
+*.so
+*.dylib
+*.dll

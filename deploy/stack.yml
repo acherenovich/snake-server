@@ -1,0 +1,131 @@
+services:
+  snake-server:
+    image: ${REGISTRY_IMAGE_PREFIX:-ghcr.io/acherenovich}/snake-server:${IMAGE_TAG:-latest}
+    environment:
+      MYSQL_HOST: ${MYSQL_HOST:?MYSQL_HOST is required}
+      MYSQL_PORT: ${MYSQL_PORT:-3306}
+      MYSQL_USER: ${MYSQL_USER:?MYSQL_USER is required}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:?MYSQL_DATABASE is required}
+      MYSQL_THREADS: ${MYSQL_THREADS:-1}
+      INTERNAL_WS_PORT: 9101
+    ports:
+      - target: 9100
+        published: 9100
+        protocol: tcp
+        mode: ingress
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+    networks:
+      - snake
+
+  snake-game-server-1:
+    image: ${REGISTRY_IMAGE_PREFIX:-ghcr.io/acherenovich}/snake-game-server:${GAME_IMAGE_TAG:-latest}
+    environment:
+      SNAKE_SERVER_HOST: snake-server
+      SNAKE_SERVER_INTERNAL_PORT: 9101
+      UDP_HOST: ${SNAKE_PUBLIC_HOST:?SNAKE_PUBLIC_HOST is required}
+      UDP_BASE_PORT: 7778
+    ports:
+      - target: 7778
+        published: 7778
+        protocol: udp
+        mode: ingress
+      - target: 7779
+        published: 7779
+        protocol: udp
+        mode: ingress
+      - target: 7780
+        published: 7780
+        protocol: udp
+        mode: ingress
+      - target: 7781
+        published: 7781
+        protocol: udp
+        mode: ingress
+      - target: 7782
+        published: 7782
+        protocol: udp
+        mode: ingress
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+    networks:
+      - snake
+
+  snake-game-server-2:
+    image: ${REGISTRY_IMAGE_PREFIX:-ghcr.io/acherenovich}/snake-game-server:${GAME_IMAGE_TAG:-latest}
+    environment:
+      SNAKE_SERVER_HOST: snake-server
+      SNAKE_SERVER_INTERNAL_PORT: 9101
+      UDP_HOST: ${SNAKE_PUBLIC_HOST:?SNAKE_PUBLIC_HOST is required}
+      UDP_BASE_PORT: 7788
+    ports:
+      - target: 7788
+        published: 7788
+        protocol: udp
+        mode: ingress
+      - target: 7789
+        published: 7789
+        protocol: udp
+        mode: ingress
+      - target: 7790
+        published: 7790
+        protocol: udp
+        mode: ingress
+      - target: 7791
+        published: 7791
+        protocol: udp
+        mode: ingress
+      - target: 7792
+        published: 7792
+        protocol: udp
+        mode: ingress
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+    networks:
+      - snake
+
+  snake-game-server-3:
+    image: ${REGISTRY_IMAGE_PREFIX:-ghcr.io/acherenovich}/snake-game-server:${GAME_IMAGE_TAG:-latest}
+    environment:
+      SNAKE_SERVER_HOST: snake-server
+      SNAKE_SERVER_INTERNAL_PORT: 9101
+      UDP_HOST: ${SNAKE_PUBLIC_HOST:?SNAKE_PUBLIC_HOST is required}
+      UDP_BASE_PORT: 7798
+    ports:
+      - target: 7798
+        published: 7798
+        protocol: udp
+        mode: ingress
+      - target: 7799
+        published: 7799
+        protocol: udp
+        mode: ingress
+      - target: 7800
+        published: 7800
+        protocol: udp
+        mode: ingress
+      - target: 7801
+        published: 7801
+        protocol: udp
+        mode: ingress
+      - target: 7802
+        published: 7802
+        protocol: udp
+        mode: ingress
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+    networks:
+      - snake
+
+networks:
+  snake:
+    driver: overlay
