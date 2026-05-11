@@ -18,6 +18,7 @@ Required GitHub Actions secrets in `snake-server`:
 - `MYSQL_PASSWORD` - MySQL password.
 - `MYSQL_DATABASE` - MySQL database.
 - `MYSQL_THREADS` - optional MySQL pool size, defaults to `1`.
+- `SESSION_SECRET` - secret used by the backend for session/auth token signing.
 - `SNAKE_PUBLIC_HOST` - public host/IP that game clients should use for UDP.
 
 One-time server setup:

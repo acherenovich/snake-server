@@ -51,6 +51,7 @@ jobs:
           MYSQL_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
           MYSQL_DATABASE: ${{ secrets.MYSQL_DATABASE }}
           MYSQL_THREADS: ${{ secrets.MYSQL_THREADS }}
+          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
           SNAKE_PUBLIC_HOST: ${{ secrets.SNAKE_PUBLIC_HOST }}
           GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
@@ -65,6 +66,7 @@ jobs:
             printf 'MYSQL_PASSWORD=%q\n' "$MYSQL_PASSWORD"
             printf 'MYSQL_DATABASE=%q\n' "$MYSQL_DATABASE"
             printf 'MYSQL_THREADS=%q\n' "${MYSQL_THREADS:-1}"
+            printf 'SESSION_SECRET=%q\n' "$SESSION_SECRET"
             printf 'SNAKE_PUBLIC_HOST=%q\n' "$SNAKE_PUBLIC_HOST"
             printf 'GHCR_USERNAME=%q\n' "$GHCR_USERNAME"
             printf 'GHCR_TOKEN=%q\n' "$GHCR_TOKEN"

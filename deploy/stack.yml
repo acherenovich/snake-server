@@ -8,6 +8,7 @@ services:
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}
       MYSQL_DATABASE: ${MYSQL_DATABASE:?MYSQL_DATABASE is required}
       MYSQL_THREADS: ${MYSQL_THREADS:-1}
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
       INTERNAL_WS_PORT: 9101
     ports:
       - target: 9100
