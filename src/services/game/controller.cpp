@@ -13,6 +13,7 @@ namespace Core::App::Game
     {
         websocket_      = IFace().Get<WsServer>();
         internalServer_ = IFace().Get<IntServer>();
+        database_       = IFace().Get<Database>();
 
         internalServer_->RegisterMessage(
             "internal::register",
@@ -116,7 +117,35 @@ namespace Core::App::Game
                         ? std::string(eobj.at("login").as_string()) : "";
                     uint32_t exp = eobj.contains("exp")
                         ? static_cast<uint32_t>(eobj.at("exp").as_int64()) : 0;
-                    leaderboard.emplace_back(login, exp);
+                    if (!login.empty())
+                    {
+                        leaderboard.emplace_back(login, exp);
+                        PersistPlayerScore(login, exp) = [this, login](const bool saved) {
+                            if (!saved)
+                                Log()->Warning("Failed to persist score for '{}'", login);
+                        };
+                    }
+                }
+            }
+
+            if (obj.contains("highScores") && obj.at("highScores").is_array())
+            {
+                for (const auto& entry : obj.at("highScores").as_array())
+                {
+                    if (!entry.is_object()) continue;
+                    const auto& eobj = entry.as_object();
+                    const std::string login = eobj.contains("login")
+                        ? std::string(eobj.at("login").as_string()) : "";
+                    const uint32_t exp = eobj.contains("exp")
+                        ? static_cast<uint32_t>(eobj.at("exp").as_int64()) : 0;
+
+                    if (!login.empty())
+                    {
+                        PersistPlayerScore(login, exp) = [this, login](const bool saved) {
+                            if (!saved)
+                                Log()->Warning("Failed to persist score for '{}'", login);
+                        };
+                    }
                 }
             }
 
@@ -142,6 +171,19 @@ namespace Core::App::Game
             Log()->Msg("Removed remote game server globalId={}", s->GetServerID());
         }
         replicaServers_.erase(client);
+    }
+
+    Utils::Task<bool> Controller::PersistPlayerScore(std::string login, uint32_t score)
+    {
+        if (!database_ || login.empty())
+            co_return false;
+
+        const auto result = co_await database_->Query(
+            "update `snake_players` set `experience` = greatest(coalesce(`experience`, 0), {}) where `login` = {}",
+            score,
+            login);
+
+        co_return result && result->IsSuccess();
     }
 
 } // namespace Core::App::Game

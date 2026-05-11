@@ -108,6 +108,18 @@ namespace Core::App::PlayerSession::Model
         return login_;
     }
 
+    Utils::Task<uint32_t> Player::RefreshExperience()
+    {
+        if (userID_ == 0)
+            co_return userExp_;
+
+        const auto found = co_await Database()->Query("select experience from `snake_players` where id = {}", userID_);
+        if (found->IsSuccess() && found->Count())
+            userExp_ = std::stoul(found->Get(0)["experience"].as_string().c_str());
+
+        co_return userExp_;
+    }
+
     [[nodiscard]] boost::json::object Player::Serialise(const SerialiseType & serialiseType)
     {
         boost::json::object result;

@@ -24,6 +24,8 @@ namespace Core::App::PlayerSession::Model
 
             [[nodiscard]] virtual std::string GetLogin() const = 0;
 
+            virtual Utils::Task<uint32_t> RefreshExperience() = 0;
+
             enum SerialiseType
             {
                 SerialisePlayer,

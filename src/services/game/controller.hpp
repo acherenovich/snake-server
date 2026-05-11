@@ -3,6 +3,7 @@
 #include "interfaces/controller.hpp"
 #include "servers/websocket/interfaces/server.hpp"
 #include "servers/internal/interfaces/server.hpp"
+#include "components/mysql/interface/connector.hpp"
 #include "remote_game_server.hpp"
 
 #include <unordered_map>
@@ -20,9 +21,11 @@ namespace Core::App::Game
         using IntServer = Servers::Internal::Interface::Server;
         using Client    = Servers::Websocket::Interface::Client;
         using Message   = Servers::Websocket::Interface::Message;
+        using Database  = Components::MySQL::Interface::Connector;
 
         WsServer::Shared  websocket_;
         IntServer::Shared internalServer_;
+        Database::Shared  database_;
 
         std::vector<RemoteGameServer::Shared> gameServers_;
         std::unordered_map<Client::Shared, std::vector<RemoteGameServer::Shared>> replicaServers_;
@@ -45,6 +48,7 @@ namespace Core::App::Game
         void HandleRegister(const Client::Shared& client, const Message::Shared& msg);
         void HandleStats(const Client::Shared& client, const Message::Shared& msg);
         void HandleReplicaDisconnected(const Client::Shared& client);
+        Utils::Task<bool> PersistPlayerScore(std::string login, uint32_t score);
     };
 
 } // namespace Core::App::Game

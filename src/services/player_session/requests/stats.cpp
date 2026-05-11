@@ -41,6 +41,14 @@ namespace Core::App::PlayerSession::Requests {
             return SendFail(player, "not_logged", sourceJobID);
         }
 
+        SendStats(player, sourceJobID) = [this, player, sourceJobID](const bool success) {
+            if (!success)
+                SendFail(player, "error", sourceJobID);
+        };
+    }
+
+    Utils::Task<bool> Stats::SendStats(const Interface::Player::Shared& player, const uint64_t sourceJobID)
+    {
         boost::json::array sessionsJson;
         for (const auto& [serverID, gameServer]: gameController_->GetGameServers())
         {
@@ -52,6 +60,13 @@ namespace Core::App::PlayerSession::Requests {
             sessionsJson.push_back(session);
         }
 
-        SendSuccess(player, {{"sessions", sessionsJson}}, sourceJobID);
+        const auto experience = co_await player->Model()->RefreshExperience();
+
+        SendSuccess(player, {
+            {"sessions", sessionsJson},
+            {"experience", static_cast<int64_t>(experience)}
+        }, sourceJobID);
+
+        co_return true;
     }
 }

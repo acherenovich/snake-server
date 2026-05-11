@@ -34,6 +34,7 @@ namespace Core::App::PlayerSession::Model
 
         std::string GetLogin() const override;
 
+        Utils::Task<uint32_t> RefreshExperience() override;
 
         [[nodiscard]] boost::json::object Serialise(const SerialiseType & serialiseType = SerialisePlayer) override;
 

@@ -17,6 +17,7 @@ namespace Core::App::PlayerSession::Requests {
         void OnAllInterfacesLoadedPost() override;
 
         void Incoming(const Interface::Player::Shared & player, const Message::Shared & message) override;
+        Utils::Task<bool> SendStats(const Interface::Player::Shared& player, uint64_t sourceJobID);
 
         [[nodiscard]] std::string GetType() const override
         {
