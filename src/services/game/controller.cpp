@@ -118,13 +118,7 @@ namespace Core::App::Game
                     uint32_t exp = eobj.contains("exp")
                         ? static_cast<uint32_t>(eobj.at("exp").as_int64()) : 0;
                     if (!login.empty())
-                    {
                         leaderboard.emplace_back(login, exp);
-                        PersistPlayerScore(login, exp) = [this, login](const bool saved) {
-                            if (!saved)
-                                Log()->Warning("Failed to persist score for '{}'", login);
-                        };
-                    }
                 }
             }
 

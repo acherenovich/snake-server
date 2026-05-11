@@ -47,7 +47,7 @@ namespace Core::App::PlayerSession::Requests {
         };
     }
 
-    Utils::Task<bool> Stats::SendStats(const Interface::Player::Shared& player, const uint64_t sourceJobID)
+    Utils::Task<bool> Stats::SendStats(const Interface::Player::Shared player, const uint64_t sourceJobID)
     {
         boost::json::array sessionsJson;
         for (const auto& [serverID, gameServer]: gameController_->GetGameServers())
